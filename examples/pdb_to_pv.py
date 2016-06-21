@@ -19,6 +19,7 @@ for infile in exp_args:
     mm.mmlewis_initialize(mm.error_handler)
     mm.mmlewis_pre_add_zobs(pdb_struct)
     assignbondorders.assign_st(pdb_struct, problem_only=True)
+    structureutil.delete_hydrogens(pdb_struct)
     structureutil.add_hydrogens(pdb_struct)
     mm.mmlewis_add_zobs(pdb_struct)
 

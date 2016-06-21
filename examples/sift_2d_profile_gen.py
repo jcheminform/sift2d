@@ -8,12 +8,21 @@ rows = {
     'H_DONOR' : 'D', 
     'H_ACCEPTOR' : 'A', 
     'HYDROPHOBIC' : 'H', 
-    'N_CHARGED' : 'N', 
-    'P_CHARGED' : 'P', 
+    'N_CHARGED' : 'C', 
+    'P_CHARGED' : 'C',      
     'AROMATIC' : 'R',
+    'POLAR': 'P',
     'ANY' : 'vdW',
     }
-
+interactions = {
+    'H_DONOR' : 'Hb', 
+    'H_ACCEPTOR' : 'Hb', 
+    'HYDROPHOBIC' : 'H',  
+    'CHARGED' : 'C',     
+    'AROMATIC' : 'R',
+    'POLAR': 'P',
+    'ANY' : 'vdW',
+    }
 
 parser = optparse.OptionParser()
 parser.add_option('-o', '--options', dest='output', type=str, default='interaction_profile_2dp.dat', help='Specify the output file')
@@ -23,6 +32,7 @@ parser.add_option('-g', '--use-generic', dest='generic', action='store_true', he
 parser.add_option('-c', '--cutoff', dest='cutoff', type=float, default=0.3, help='Interactions frequency cutoff.')
 parser.add_option('-t', '--table', dest='table', action='store_true', help='Print a table with per ligand interactions.')
 parser.add_option('-d', '--feature_table', dest='feat_table', action='store_true', help='Print a table with per ligand interactions. Indicate the most frequently interacting pharmacophore feature.')
+parser.add_option('-i', '--interaction_based', dest='interaction', action='store_true', help='Print the most common interactions instead of feature in the table.')
 parser.add_option('-w', '--word', dest='wordfriendly', action='store_true', help='Make the table "MS Word friendly" ')
 
 
@@ -39,7 +49,6 @@ for arg in exp_args:
     sift_list.extend(list(im.SIFt2DReader(arg)))
     print("{}\t{}".format(list(im.SIFt2DReader(arg))[0].receptor_name, [x.resnum for x in list(im.SIFt2DReader(arg))[0].get_interacting_chunks()]))
 generic_numbers = None
-print(len(sift_list))
 if options.generic:
     generic_numbers = sorted(list(set(itertools.chain.from_iterable(x.custom_residues_set for x in sift_list))))
 s2dp = im.SIFt2DProfile(sift_list, generic_numbers=generic_numbers)
@@ -55,7 +64,10 @@ if options.table:
     for s2 in sift_list:
         line = ['x'  if x.resnum in [y.resnum for y in s2.get_interacting_chunks()] else '' for x in profile_chunks]
         if options.feat_table:
-            line = [rows[x.get_the_most_frequent_feature()[1]]  if x.resnum in [y.resnum for y in s2.get_interacting_chunks()] else '' for x in profile_chunks]
+            if options.interaction:
+                line = [interactions[s2[x.resnum].get_the_most_frequent_interaction()[1]]  if x.resnum in [y.resnum for y in s2.get_interacting_chunks()] else '' for x in profile_chunks]
+            else:
+                line = [rows[s2[x.resnum].get_the_most_frequent_feature()[1]]  if x.resnum in [y.resnum for y in s2.get_interacting_chunks()] else '' for x in profile_chunks]
         t.add_row([s2.receptor_name, s2.ligand_name] + line)
     t.add_row(['Avg.', ''] + ['{:.2f}'.format(x.chunk.max()) for x in profile_chunks])
     print(t)

@@ -9,8 +9,9 @@ parser = optparse.OptionParser()
 parser.add_option('-o', '--output', dest='output', default=None, type=str, help='Specify the output file')
 parser.add_option('-u', '--unique', dest='unique', action='store_true', help='Generate 2d SIFt only for unique ligands (multiple occurences of the same ligand are ignored)')
 parser.add_option('-p', '--property', dest='property', type=str, help='Take ligand names from structure property <prop>')
+parser.add_option('-c', '--cutoff', dest='cutoff', type=float, default=3.5, help='Interactions frequency cutoff.')
 parser.add_option('-g', '--use-generic', dest='generic', action='store_true', help='Use generic numbers from the receptor structure')
-parser.add_option('-c', '--pickle_output', dest='pickle', action='store_true', help='Save output as pickled SIFt2D objects.')
+parser.add_option('-i', '--pickle_output', dest='pickle', action='store_true', help='Save output as pickled SIFt2D objects.')
 
 (options, args) = parser.parse_args()
 exp_args = []
@@ -24,7 +25,7 @@ for arg in exp_args:
     print(receptor.title)
     struct_it = structure.StructureReader(arg, index=2)
     
-    s2dg = im.SIFt2DGenerator(receptor, struct_it, use_generic_numbers=options.generic, unique=options.unique, property=options.property)
+    s2dg = im.SIFt2DGenerator(receptor, struct_it, use_generic_numbers=options.generic, cutoff=options.cutoff, unique=options.unique, property=options.property)
     if options.output:
         if options.pickle:
             out_fh = open(options.output, 'wb')

@@ -49,7 +49,7 @@ residue_sets = {
     }
 
 #Order of returning the most frequent interactions
-interaction_hierarchy = ['H_ACCEPTOR', 'H_DONOR', 'POLAR', 'AROMATIC', 'CHARGED', 'ANY']
+interaction_hierarchy = ['CHARGED', 'H_ACCEPTOR', 'H_DONOR', 'POLAR', 'AROMATIC', 'HYDROPHOBIC']
 
 #Rules for distance-based interactions, h_bonds and aromatic interactions are evaluated with builtin Schrodinger functions
 interaction_rules = {
@@ -69,11 +69,11 @@ ph_patterns = {
     'H_DONOR': 
     ['[#1][O;X2]', '[#1]S[#6]', '[#1][C;X2]#[C;X2]', '[#1][NX3]C(=[NX2])[#6]', '[#1][#7]'],
     'H_ACCEPTOR': 
-    ['[N;X1]#[#6]', '[N;X1]#CC', '[N;X2](=C~[C,c])C', '[N;X2](O)=N[a]', '[N;X2](=N-O)[a]', '[n;X2]1ccccc1', '[n;X2]([a])([a])', '[N;X2](=C~[C,c])(~[*])', '[N;X3](C)(C)[N;X3]C', '[N;X2](=C)(~[*])', '[N;X2](~[C,c])=[N;X2]', '[n;X2]1c[nH]cc1', 'O=[S;X4](=O)([!#8])([!#8])', '[O;X2]C', '[O;X2]N', '[O;X1]=[C,c]', 'o', '[O;X2](C)C', '[O;X2]c1ncccc1', '[O;X2]~[a]', 'O=PO([!#1])', '[O;X2]', '[S;X2](C)C', '[S;X2](=C)N'], 
+    ['[N;X1]#[#6]', '[N;X1]#CC', '[N;X2](=C~[C,c])C', '[N;X2](O)=N[a]', '[N;X2](=N-O)[a]', '[n;X2]1ccccc1', '[n;X2]([a])([a])', '[N;X2](=C~[C,c])(~[*])', '[N;X3](C)(C)[N;X3]C', '[N;X2](=C)(~[*])', '[N;X2](~[C,c])=[N;X2]', '[n;X2]1c[nH]cc1', 'O=[S;X4](=O)([!#8])([!#8])', '[O;X2]C', '[O;X2]N', '[O;X1]=[C,c]', 'o', '[O;X2](C)C', '[O;X2]c1ncccc1', '[O;X2]~[a]', 'O=PO([!#1])', '[O;X2]', '[S;X2](C)C', '[S;X2](=C)N', 'O=C[O-]'], 
     'P_CHARGED': 
     ['[NX3][#6](=[NX2,NX3+])[#6]', '[NX2,NX3+]=[#6]([NH;X3])([NH;X3])', '[NX2,NX3+]=[#6]([NX3])([NX3])', 'n1c([NH2])ccnc1([NH2])', '[NX2,NX3+]=C([NX3])c1ccccc1', '[NH2;X3,NH3]([#6;X4])', '[NH;X3,NH2]([#6;X4])([#6;X4])', '[NX3,NH]([#6;X4])([#6;X4])([#6;X4])', 'N1CCCCC1', '[+]'],
     'HYDROPHOBIC': 
-    ['[a]F', '[a]Cl', '[a]Br', '[a]I', '[a]C(F)(F)(F)', '[a][CH2]C(F)(F)(F)', '[a]O[CH3]', '[a]S[CH3]', '[a]OC(F)(F)(F)', 'C(F)(F)(F)', 'F', 'Cl', 'Br', 'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C'],
+    ['[a]F', '[a]Cl', '[a]Br', '[a]I', '[a]C(F)(F)(F)', '[a][CH2]C(F)(F)(F)', '[a]O[CH3]', '[a]S[CH3]', '[a]OC(F)(F)(F)', 'C(F)(F)(F)', 'F', 'Cl', 'Br', 'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C', 'C1CCCCC1'],
     'N_CHARGED': 
     ['O=C[O-]','O=C[OH]','[S;X4](=O)(=O)([OH])','[S;X4](=O)(=O)([O-])','[S;X3](=O)([OH])','[S;X3](=O)([O-])','[P;X4](=O)([OH])([OH])','[P;X4](=O)([OH])([O-])','[P;X4](=O)([O-])','[P;X4](=O)([OH])','n1nc[nH]n1','n1ncnn1','[#1]N([S;X4](=O)(=O))(C(F)(F)(F))','[-]'],
     }
@@ -151,7 +151,7 @@ class SIFt2DChunk:
         return self.chunk[:, col_num]
 
 
-    def get_most_frequent_interaction(self):
+    def get_the_most_frequent_interaction(self):
         """
         Returns the most frequent interaction.
         """
@@ -160,7 +160,12 @@ class SIFt2DChunk:
             tmp_max = max(self.chunk[:, columns[column]])
             if tmp_max > imax[0]:
                 imax = (tmp_max, column)
-
+        if imax[1] == 'CHARGED' and self.chunk[rows['H_DONOR'], columns['H_ACCEPTOR']] != 0:
+            imax = (imax[0], 'H_ACCEPTOR')
+        if imax[1] == 'CHARGED' and self.chunk[rows['H_ACCEPTOR'], columns['H_DONOR']] != 0:
+            imax = (imax[0], 'H_DONOR')
+        if imax == (0.0, '') and max(self.chunk[:, columns['ANY']]) != 0.0:
+            return (max(self.chunk[:, columns['ANY']]), 'ANY')
         return imax
 
 
@@ -169,13 +174,12 @@ class SIFt2DChunk:
         Returns the most frequently interacting pharmacophore feature.
         """
         imax = (0.0, '')
-        for row in rows.keys():
+        for row in sorted(rows.keys(), reverse=True):
             if row == "ANY" and imax[0] != 0.0:
                 break
             tmp_max = max(self.chunk[rows[row], :])
             if tmp_max > imax[0]:
                 imax = (tmp_max, row)
-
         return imax
 
 
@@ -187,12 +191,15 @@ class SIFt2DChunk:
         heatmap = plt.figure()
         ax = heatmap.gca(xlabel="Residue interactions", ylabel="Ligand features")
         ax.set_yticks(np.arange(len(rows))+0.5, minor=False)
+        ax.set_yticks(np.arange(len(rows)), minor=True)
         ax.set_yticklabels(['D','A','H','N','P','R','vdW'], size='large')
         ax.invert_yaxis()
         ax.set_xticks(np.arange(len(columns))+0.5, minor=False)
+        ax.set_xticks(np.arange(len(columns)), minor=True)
         ax.set_xticklabels(['Any', 'BB', 'SC', 'Polar', 'H', 'A', 'D', 'R', 'Charged'], size='large')
         coll = plt.pcolor(self.chunk, vmax=vmax, cmap=plt.cm.Greys, figure=heatmap)
-        
+        ax.grid(which='minor')
+
         return heatmap
 
 
@@ -449,6 +456,7 @@ class SIFt2D:
         heatmap = plt.figure(figsize=(20,6))
         ax = heatmap.gca(xlabel="Residue number", ylabel="Pharmacophore features")
         ax.set_yticks(np.arange(len(rows))+0.5, minor=False)
+        ax.set_yticks(np.arange(len(rows)), minor=True)
         ax.set_yticklabels(['D','A','H','N','P','R','vdW'], size='large')
         ax.invert_yaxis()
         ax.set_xlabel("Residue number", size='large')
@@ -456,6 +464,7 @@ class SIFt2D:
 
         if selected_chunks:
             ax.set_xticks(np.arange(len(selected_chunks))*len(columns)+0.5*len(columns), minor=False)
+            ax.set_xticks(np.arange(len(selected_chunks))*len(columns), minor=True)
             ax.set_xticklabels(xticklabels, rotation="vertical")
             if self._mapping:
                 coll = plt.pcolor(np.concatenate([x.chunk for x in [self._chunks[self._mapping[x]] if x in self._mapping.keys() else self.generic_chunk.chunk for x in selected_chunks]], axis=1), cmap=colormap, figure=heatmap, vmin=vmin, vmax=vmax)
@@ -463,7 +472,7 @@ class SIFt2D:
                 coll = plt.pcolor(np.concatenate([x.chunk for x in [self._chunks[x - self.start] for x in selected_chunks]], axis=1), cmap=colormap, figure=heatmap, vmin=vmin, vmax=vmax)
         else:
             coll = plt.pcolor(np.concatenate([x.chunk for x in self._chunks], axis=1), cmap=colormap, figure=heatmap, vmin=vmin, vmax=vmax)
-        ax.grid(b=True, which='minor', axis='x')
+        ax.grid(b=True, which='minor')
         heatmap.colorbar(coll)
 
         return heatmap
@@ -512,11 +521,11 @@ class SIFt2DGenerator:
                 self.sifts.append(SIFt2D(lig.title, self.receptor_st.title, self.starting_res_num, self.ending_res_num, self._generic_numbers))
                 print("Working on ligand {!s} {:n}".format(lig.title, num))
          
-            try:
+            #try:
                 self.generate_2d_sift(lig, self.sifts[-1])
-            except Exception as msg:
-                print(msg)
-                continue
+            #except Exception as msg:
+            #    print(msg)
+            #    continue
             if unique and property:
                 self.lig_list.append(lig.property[property])
             elif unique:
@@ -565,12 +574,15 @@ class SIFt2DGenerator:
         Find interactions and encode the interaction matrix.
         """
         features = self.assign_pharm_feats(ligand)
+        print(features)
         for residue in self.receptor_st.residue:
             for ftype in features.keys():
                 if ftype == 'AROMATIC':
                     continue
                 for feat in features[ftype]:
                     active_bits = self.find_feature_interactions(ftype, feat, ligand, residue)
+                    if active_bits == []:
+                        continue
                     if self._generic_numbers:
                         self.activate_bits(active_bits, ftype, self._get_generic_number(residue.resnum), matrix)
                     else:
@@ -604,7 +616,6 @@ class SIFt2DGenerator:
         The function evaluates type/distance-based interactions and h_bonds. Aromatic interactions are treated globally (on the receptor level), not on the atomic level.
         """
         rec_act_bits = []
-        
         for ratom in residue.getAtomList():
             for atom in feat_atoms:
                 atom_atom_dist = measure.measure_distance(ligand_st.atom[atom],  self.receptor_st.atom[ratom])
@@ -619,9 +630,12 @@ class SIFt2DGenerator:
                     #if feat_name == 'ANY':
                     #    continue
                     if analyze.match_hbond(ligand_st.atom[atom], self.receptor_st.atom[ratom], distance_max=2.8, distance=atom_atom_dist):
+                        if feat_name not in ["H_DONOR", "H_ACCEPTOR"]:
+                            continue
                         if self.receptor_st.atom[ratom].atomic_number == 1:
                             rec_act_bits.append('H_DONOR')
                         else:
+                            print("Got it {}".format(residue.resnum))
                             rec_act_bits.append('H_ACCEPTOR')
                         if int(ratom) in self.backbone_set:
                             rec_act_bits.append('BACKBONE')
@@ -629,6 +643,10 @@ class SIFt2DGenerator:
                             rec_act_bits.append('SIDECHAIN')
 
                     if feat_name not in interaction_rules.keys():
+                        continue
+                    if feat_name == 'H_ACCEPTOR' and feat_name not in rec_act_bits:
+                        continue
+                    if feat_name == 'H_DONOR' and feat_name not in rec_act_bits:
                         continue
                     for r_feat in interaction_rules[feat_name][interaction_dict['residue_features']]:
                         if residue.pdbres.strip() in residue_sets[r_feat]:
@@ -651,10 +669,19 @@ class SIFt2DGenerator:
         matches = {}
         for key in ph_patterns.keys():
             matches[key] = []
+            tmp = []
             for pattern in ph_patterns[key]:
                 s = sorted(analyze.evaluate_smarts_canvas(lig_struct, pattern, uniqueFilter=True))
-                if s != []:
-                    matches[key] = s
+                if s != [] and s not in matches[key]:
+                    incl = 0
+                    for x in s:                       
+                        for y in matches[key]:
+                            if set(x) <= set(y):
+                                incl = 1
+
+                    if incl == 1:
+                        continue
+                    matches[key].extend(s)
             if matches[key] == []:
                 del matches[key]
         matches['AROMATIC'] = [x.getAtomList() for x in lig_struct.ring]
