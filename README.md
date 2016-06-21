@@ -7,3 +7,6 @@ Dependancies
 
 Setup
 $SCHRODINGER/run setup.py install
+
+
+Fixed a bug that caused improper assignment of the polar interaction.
