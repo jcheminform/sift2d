@@ -9,4 +9,5 @@ Setup
 $SCHRODINGER/run setup.py install
 
 
+21.06.2016
 Fixed a bug that caused improper assignment of the polar interaction.
