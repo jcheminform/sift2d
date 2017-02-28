@@ -21,12 +21,12 @@ vmin = min([x.chunk.min() for x in diff.get_interacting_chunks(cutoff)])
 border = max(-vmin, vmax)
 #diff
 hm = diff.get_heatmap(common_positions, plt.cm.seismic, vmin=-border, vmax=border)
-hm.savefig('difference.png', dpi=300)
+hm.savefig('difference.jpg', dpi=300)
 #Profile #1
 p1_fig = p1.get_heatmap(common_positions, plt.cm.Blues, vmax=border)
-p1_fig.savefig('profile1.png', dpi=300)
+p1_fig.savefig('profile1.jpg', dpi=300)
 print("Profile 1 positions: {}".format([x.resnum for x in p1.get_interacting_chunks(cutoff)]))
 #Profile #2
 p2_fig = p2.get_heatmap(common_positions, plt.cm.Reds,  vmax=border)
-p2_fig.savefig('profile2.png', dpi=300)
+p2_fig.savefig('profile2.jpg', dpi=300)
 print("Profile 2 positions: {}".format([x.resnum for x in p2.get_interacting_chunks(cutoff)]))

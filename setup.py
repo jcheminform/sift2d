@@ -9,12 +9,12 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 setup(
-    name = "sift2d",
-    version = "0.1",
-    author = "Stefan Mordalski",
-    author_email = "stefanm@if-pan.krakow.pl",
-    description = ("A library to generate and manipulate 2D-SIFt interaction matrices."),
-    license = "BSD",
+    name="sift2d",
+    version="0.1",
+    author="Stefan Mordalski",
+    author_email="stefanm@if-pan.krakow.pl",
+    description=("A library to generate and manipulate 2D-SIFt interaction matrices."),
+    license="BSD",
     packages=['sift2d', 'examples'],
-    long_description=read('README'),
+    long_description=read('README.md'),
 )
