@@ -91,7 +91,7 @@ PH_PATTERNS = {
     'HYDROPHOBIC':
     ['[a]F', '[a]Cl', '[a]Br', '[a]I', '[a]C(F)(F)(F)', '[a][CH2]C(F)(F)(F)',
      '[a]O[CH3]', '[a]S[CH3]', '[a]OC(F)(F)(F)', 'C(F)(F)(F)', 'F', 'Cl', 'Br',
-     'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C', 'C1CCCCC1'],
+     'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C', 'C1CCCCC1', '[a]', '[AR0]~[AR0]'],
     'N_CHARGED':
     ['O=C[O-]', 'O=C[OH]', '[S;X4](=O)(=O)([OH])', '[S;X4](=O)(=O)([O-])',
      '[S;X3](=O)([OH])', '[S;X3](=O)([O-])', '[P;X4](=O)([OH])([OH])',
@@ -264,6 +264,7 @@ class SIFt2D:
             for idx, item in enumerate(self.custom_residues_set):
                 self._mapping[item] = idx
                 self._chunks.append(SIFt2DChunk(item))
+        print(self._mapping)
 
     #TODO: Add support for custom numbers for __len__, __iter__ and __getitem__
     def __len__(self):
@@ -284,6 +285,7 @@ class SIFt2D:
         """
         Get chunk(s) related to a given residue or residue range.
         """
+        print(resnum)
         if self._mapping:
             try:
                 return self._chunks[self._mapping[resnum]]
@@ -663,8 +665,9 @@ class SIFt2DGenerator:
         Find interactions and encode the interaction matrix.
         """
         features = self.assign_pharm_feats(ligand)
-        print(features)
         for residue in self.receptor_st.residue:
+            print(residue.resnum)
+            print(self._get_generic_number(residue.resnum))
             for ftype in features.keys():
                 if ftype == 'AROMATIC':
                     continue
