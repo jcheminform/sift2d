@@ -4,6 +4,7 @@ and interaction profiles (averaged 2D-SIFts).
 """
 from __future__ import print_function
 
+from functools import reduce
 import itertools
 import math
 from string import Template
@@ -40,13 +41,9 @@ ROWS = {
 
 #Residue sets by properties
 RESIDUE_SETS = {
-    "POLAR_RESIDUES": ["ARG", "ASP", "GLU", "HIS", "ASN", "GLN",
-                       "LYS", "SER", "THR", "ARN", "ASH", "GLH",
-                       "HID", "HIE", "LYN"],
     "HYDROPHOBIC_RESIDUES": ["PHE", "LEU", "ILE", "TYR", "TRP",
                              "VAL", "MET", "PRO", "CYS", "ALA",
                              "CYX"],
-    "AROMATIC_RESIDUES": ["PHE", "TYR", "TRP", "TYO"],
     "P_CHARGED_RESIDUES": ["ARG", "LYS", "HIS", "HID"],
     "N_CHARGED_RESIDUES": ["ASP", "GLU"],
     }
@@ -54,14 +51,12 @@ RESIDUE_SETS = {
 #Order of returning the most frequent interactions
 INTERACTION_HIERARCHY = ['CHARGED', 'H_ACCEPTOR', 'H_DONOR', 'POLAR', 'AROMATIC', 'HYDROPHOBIC']
 
-#Rules for distance-based interactions, h_bonds and
+# Rules for distance-based interactions, h_bonds and
 # aromatic interactions are evaluated with
 # builtin Schrodinger functions
 INTERACTION_RULES = {
     'P_CHARGED': [['N_CHARGED_RESIDUES'], ['CHARGED']],
     'N_CHARGED': [['P_CHARGED_RESIDUES'], ['CHARGED']],
-    'H_DONOR': [['POLAR_RESIDUES'], ['POLAR']],
-    'H_ACCEPTOR': [['POLAR_RESIDUES'], ['POLAR']],
     'HYDROPHOBIC': [['HYDROPHOBIC_RESIDUES'], ['HYDROPHOBIC']],
     }
 INTERACTION_DICT = {
@@ -91,7 +86,7 @@ PH_PATTERNS = {
     'HYDROPHOBIC':
     ['[a]F', '[a]Cl', '[a]Br', '[a]I', '[a]C(F)(F)(F)', '[a][CH2]C(F)(F)(F)',
      '[a]O[CH3]', '[a]S[CH3]', '[a]OC(F)(F)(F)', 'C(F)(F)(F)', 'F', 'Cl', 'Br',
-     'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C', 'C1CCCCC1', '[a]', '[AR0]~[AR0]'],
+     'I', 'C[S;X2]C', '[S;X2]CC', '[S;X2]C', '[AR0]~[AR0]'],
     'N_CHARGED':
     ['O=C[O-]', 'O=C[OH]', '[S;X4](=O)(=O)([OH])', '[S;X4](=O)(=O)([O-])',
      '[S;X3](=O)([OH])', '[S;X3](=O)([O-])', '[P;X4](=O)([OH])([OH])',
@@ -110,16 +105,19 @@ class SIFt2DChunk:
     """
     Class storing information about interactions for a single residue.
     """
-    #odwolania do tablic numpy tabl[wiersz, kolumna] przy tworzeniu i
-    #czytaniu/modyfikacji
 
     def __init__(self, resnum=None, data=None):
+        """Class storing interaction matrix for a single residue.
+
+        Keyword Arguments:
+            resnum {int} -- Residue number (default: {None})
+            data {numpy.array} -- A 2D array of shape corresponding to defined interactions.\
+             (default: {None})
         """
-        Class storing interaction matrix for a single residue.
-        """
+
         self.resnum = resnum
-        #Schrodinger's version of numpy returns shape in form of (xL, yL)
-        #  - can't just compare shape to a tuple (ROWS, COLUMNS)
+        #*Schrodinger's version of numpy returns shape in form of (xL, yL)
+        #*  - can't just compare shape to a tuple (ROWS, COLUMNS)
         if data is None or data.shape != np.zeros((len(ROWS), len(COLUMNS))).shape:
             self.chunk = np.zeros((len(ROWS), len(COLUMNS)), dtype=np.int)
         else:
@@ -127,8 +125,11 @@ class SIFt2DChunk:
 
 
     def increment_bit(self, row, col):
-        """
-        Increase value at given position by 1.
+        """Increase value at given position by 1.
+
+        Arguments:
+            row {int} -- Row number
+            col {int} -- Column number
         """
 
         self.chunk[ROWS[row]][COLUMNS[col]] += 1
@@ -161,15 +162,28 @@ class SIFt2DChunk:
 
 
     def get_row(self, row_num):
+        """Returns interactions of given pharmacophore feature.
+
+        Arguments:
+            row_num {int} -- A row number from the interaction matrix
+
+        Returns:
+            numpy.array -- An interaction matrix slice with interactions for a \
+            single pharmacophore feature type.
         """
-        Returns interactions of given pharmacophore feature.
-        """
+
         return self.chunk[row_num, :]
 
 
     def get_column(self, col_num):
-        """
-        Returns interactions of given type.
+        """Returns interactions of given type.
+
+        Arguments:
+            col_num {int} -- A column number from the interaction matrix
+
+        Returns:
+            numpy.array -- An interaction matrix slice with interactions of a \
+            given type.
         """
         return self.chunk[:, col_num]
 
@@ -264,7 +278,6 @@ class SIFt2D:
             for idx, item in enumerate(self.custom_residues_set):
                 self._mapping[item] = idx
                 self._chunks.append(SIFt2DChunk(item))
-        print(self._mapping)
 
     #TODO: Add support for custom numbers for __len__, __iter__ and __getitem__
     def __len__(self):
@@ -285,12 +298,11 @@ class SIFt2D:
         """
         Get chunk(s) related to a given residue or residue range.
         """
-        print(resnum)
         if self._mapping:
             try:
                 return self._chunks[self._mapping[resnum]]
             except KeyError:
-                raise KeyError("No chunk found for residue {}.".format(resnum))
+                raise KeyError("No chunk found for residue {:n}.".format(resnum))
         else:
             try:
                 return self._chunks[resnum - self.start]
@@ -421,8 +433,7 @@ class SIFt2D:
         """
         if self._mapping:
             return [self._chunks[self._mapping[x]] for x in sorted(self._mapping.keys())]
-        else:
-            return self._chunks
+        return self._chunks
 
 
     def get_listed_chunks(self, res_list):
@@ -493,7 +504,8 @@ class SIFt2D:
         Returns a standardized heatmap figure.
         """
         if self._mapping:
-            xticklabels = ["{}".format(x) if len(str(x)) > 3 else "{:.2f}".format(float(x))
+            xticklabels = ["{}".format(x).replace('.', 'x') if len(str(x)) > 3
+                           else "{:.2f}".format(float(x)).replace('.', 'x')
                            for x in selected_chunks]
         else:
             xticklabels = ["{}".format(x) for x in selected_chunks]
@@ -569,11 +581,13 @@ class SIFt2DGenerator:
 
         self.receptor_st = rec_struct
         self.cutoff = cutoff
+        self.hbond_cutoff = 2.5
         if use_generic_numbers:
             self.receptor_st = rec_struct.extract(analyze.get_atoms_from_asl(
                 rec_struct,
                 "fillres (a. CA and a.pdbbfactor > -8.1 and a.pdbbfactor < 8.1)"))
             self._generic_numbers = self._get_generic_numbers_list()
+            print(self._generic_numbers)
             self.receptor_st.title = rec_struct.title
         self._get_receptor_params()
 
@@ -601,11 +615,7 @@ class SIFt2DGenerator:
                     self._generic_numbers))
                 print("Working on ligand {!s} {:n}".format(lig.title, num))
 
-            #try:
-                self.generate_2d_sift(lig, self.sifts[-1])
-            #except Exception as msg:
-            #    print(msg)
-            #    continue
+            self.generate_2d_sift(lig, self.sifts[-1])
             if unique and property:
                 self._lig_list.append(lig.property[property])
             elif unique:
@@ -643,21 +653,39 @@ class SIFt2DGenerator:
         Following GPCRdb convention, GPCRdb generic numbers are stored
         as b factors of CA atom of each residue.
         """
-        return map(lambda x: (x.temperature_factor > 0 and x.temperature_factor)
+        return list(map(lambda x: (x.temperature_factor > 0 and x.temperature_factor)
                    or (x.temperature_factor < 0 and -x.temperature_factor + 0.001),
                    analyze.get_atoms_from_asl(
                        self.receptor_st,
-                       "a. CA and a.pdbbfactor > -8.1 and a.pdbbfactor < 8.1"))
+                       "a. CA and a.pdbbfactor > -8.1 and a.pdbbfactor < 8.1")))
 
 
     def _get_generic_number(self, residue_number):
         """
         Retrieve GPCRdb generic number stored in CA temperature factor.
         """
-        return (lambda x: (x > 0 and x) or (x < 0 and -x + 0.001)
-                (analyze.get_atoms_from_asl(
-                    self.receptor_st,
-                    "a. CA and r. {!s}".format(residue_number)).next().temperature_factor))
+
+        num = next(analyze.get_atoms_from_asl(
+            self.receptor_st,
+            "a. CA and r. {!s}".format(residue_number)
+            )).temperature_factor
+        if num > 0:
+            return num
+        else:
+            return round(-num + 0.001, 3)
+
+    # def _is_atom_in_feature(self, feat_name, atom):
+
+    #     for subset in self.features[feat_name]:
+    #         if atom in subset:
+    #             return True
+    #     return False
+
+    # def _delete_matching_feture_subset(self, feat_name, atom):
+
+    #     for subset in self.features[feat_name]:
+    #         if atom in subset:
+    #             self.features[feat_name].remove(subset)
 
 
     def generate_2d_sift(self, ligand, matrix):
@@ -666,8 +694,6 @@ class SIFt2DGenerator:
         """
         features = self.assign_pharm_feats(ligand)
         for residue in self.receptor_st.residue:
-            print(residue.resnum)
-            print(self._get_generic_number(residue.resnum))
             for ftype in features.keys():
                 if ftype == 'AROMATIC':
                     continue
@@ -751,6 +777,8 @@ class SIFt2DGenerator:
                     ligand_st.atom[atom],
                     self.receptor_st.atom[ratom])
                 if atom_atom_dist <= self.cutoff:
+                    if feat_name == ['H_ACCEPTOR'] and self.receptor_st.atom[ratom].atomic_number != 1:
+                        continue
                     if feat_name == 'ANY':
                         rec_act_bits.append('ANY')
                         if int(ratom) in self.backbone_set:
@@ -758,51 +786,74 @@ class SIFt2DGenerator:
                         else:
                             rec_act_bits.append('SIDECHAIN')
                         continue
-                    #if feat_name == 'ANY':
-                    #    continue
                     if analyze.match_hbond(
                             ligand_st.atom[atom],
                             self.receptor_st.atom[ratom],
-                            distance_max=2.8):
+                            distance_max=self.cutoff):
                         if feat_name not in ["H_DONOR", "H_ACCEPTOR"]:
                             continue
-                        if self.receptor_st.atom[ratom].atomic_number == 1:
-                            if self._generic_numbers:
-                                self.activate_bits(
-                                    ['H_ACCEPTOR'],
-                                    'H_DONOR',
-                                    self._get_generic_number(residue.resnum),
-                                    self.sifts[-1])
+                        if atom_atom_dist <= self.hbond_cutoff:
+                            if self.receptor_st.atom[ratom].atomic_number == 1:
+                                if self._generic_numbers:
+                                    self.activate_bits(
+                                        ['H_ACCEPTOR'],
+                                        'H_DONOR',
+                                        self._get_generic_number(residue.resnum),
+                                        self.sifts[-1])
+                                else:
+                                    self.activate_bits(
+                                        ['H_ACCEPTOR'],
+                                        'H_DONOR',
+                                        residue.resnum,
+                                        self.sifts[-1])
                             else:
-                                self.activate_bits(
-                                    ['H_ACCEPTOR'],
-                                    'H_DONOR',
-                                    residue.resnum,
-                                    self.sifts[-1])
+                                if self._generic_numbers:
+                                    self.activate_bits(
+                                        ['H_DONOR'],
+                                        'H_ACCEPTOR',
+                                        self._get_generic_number(residue.resnum),
+                                        self.sifts[-1])
+                                else:
+                                    self.activate_bits(
+                                        ['H_DONOR'],
+                                        'H_ACCEPTOR',
+                                        residue.resnum,
+                                        self.sifts[-1])
                         else:
-                            if self._generic_numbers:
-                                self.activate_bits(
-                                    ['H_DONOR'],
-                                    'H_ACCEPTOR',
-                                    self._get_generic_number(residue.resnum),
-                                    self.sifts[-1])
+                            if self.receptor_st.atom[ratom].atomic_number == 1:
+                                if self._generic_numbers:
+                                    self.activate_bits(
+                                        ['POLAR'],
+                                        'H_DONOR',
+                                        self._get_generic_number(residue.resnum),
+                                        self.sifts[-1])
+                                else:
+                                    self.activate_bits(
+                                        ['POLAR'],
+                                        'H_DONOR',
+                                        residue.resnum,
+                                        self.sifts[-1])
                             else:
-                                self.activate_bits(
-                                    ['H_DONOR'],
-                                    'H_ACCEPTOR',
-                                    residue.resnum,
-                                    self.sifts[-1])
+                                if self._generic_numbers:
+                                    self.activate_bits(
+                                        ['POLAR'],
+                                        'H_ACCEPTOR',
+                                        self._get_generic_number(residue.resnum),
+                                        self.sifts[-1])
+                                else:
+                                    self.activate_bits(
+                                        ['POLAR'],
+                                        'H_ACCEPTOR',
+                                        residue.resnum,
+                                        self.sifts[-1])
                         if int(ratom) in self.backbone_set:
                             rec_act_bits.append('BACKBONE')
                         else:
                             rec_act_bits.append('SIDECHAIN')
+                        return list(set(rec_act_bits))
 
                     if feat_name not in INTERACTION_RULES.keys():
                         continue
-                    #if feat_name == 'H_ACCEPTOR' and feat_name not in rec_act_bits:
-                    #    continue
-                    #if feat_name == 'H_DONOR' and feat_name not in rec_act_bits:
-                    #    continue
                     for r_feat in INTERACTION_RULES[feat_name][INTERACTION_DICT[
                             'residue_features']]:
                         if residue.pdbres.strip() in RESIDUE_SETS[r_feat]:
@@ -827,7 +878,6 @@ class SIFt2DGenerator:
         matches = {}
         for key in PH_PATTERNS.keys():
             matches[key] = []
-            tmp = []
             for pattern in PH_PATTERNS[key]:
                 s = sorted(analyze.evaluate_smarts_canvas(lig_struct, pattern, uniqueFilter=True))
                 if s != [] and s not in matches[key]:
@@ -842,6 +892,10 @@ class SIFt2DGenerator:
                     matches[key].extend(s)
             if matches[key] == []:
                 del matches[key]
+        try:
+            matches['HYDROPHOBIC'] = [list(set(reduce(lambda x, y: x+y, matches['HYDROPHOBIC'])))]
+        except KeyError:
+            pass
         matches['AROMATIC'] = [x.getAtomList() for x in lig_struct.ring]
         matches['ANY'] = [[x.index for x in lig_struct.atom]]
         return matches
@@ -878,7 +932,7 @@ class SIFt2DReader:
 
         if not filename and not filehandle and not input_string:
             raise IOError("Some input must be specified, file name, file handle or input string.")
-        if format not in OUTPUT_FORMAT.keys():
+        if format_ not in OUTPUT_FORMAT:
             raise IOError("Specified format is not supported.")
         if filename:
             fh = open(filename, 'r')
@@ -1026,10 +1080,10 @@ class SIFt2DProfile(SIFt2D):
         end = max([x.end for x in self._sifts])
         for sift in self._sifts:
             if sift.start > start:
-                for i in range(sift.start - start):
+                for _ in range(sift.start - start):
                     sift.prepend_chunk()
             if sift.end < end:
-                for i in range(end - sift.end):
+                for _ in range(end - sift.end):
                     sift.append_chunk()
 
 
@@ -1134,7 +1188,7 @@ class SIFt2DProfileReader:
     """
 
 
-    def __init__(self, filename=None, filehandle=None, input_string=None, format='txt'):
+    def __init__(self, filename=None, filehandle=None, input_string=None, profile_format='txt'):
 
         self._profile = None
         self.custom_residues_set = None
@@ -1145,35 +1199,40 @@ class SIFt2DProfileReader:
             raise IOError("Specified format is not supported.")
         if filename:
             fh = open(filename, 'r')
-            self._profile = self.fh_reader(fh, format)
+            self._profile = self.fh_reader(fh, profile_format=profile_format)
         elif filehandle:
-            self._profile = self.fh_reader(filehandle, format)
+            self._profile = self.fh_reader(filehandle, profile_format=profile_format)
         else:
-            self._profile = self.string_reader(input_string, format)
+            self._profile = self.fh_reader(fp_string=input_string, profile_format=profile_format)
 
 
-    def fh_reader(self, fh, format):
+    def fh_reader(self, fh=None, fp_string=None, profile_format='txt'):
 
         output = None
         #The profile should contain 2 lines maximum. Anything more will be ignored
-        profile_lines = fh.readlines()
+        if fh:
+            profile_lines = fh.readlines()
+        elif fp_string:
+            profile_lines = fp_string.split('\n')
+        else:
+            return output
         if len(profile_lines) > 1:
             resi_defs = profile_lines[0]
             if resi_defs.startswith('#'):
                 self.custom_residues_set = resi_defs[1:].strip().split(';')
-                output = self.format_parser(profile_lines[1], format)
+                output = self.format_parser(profile_lines[1], profile_format)
             else:
-                output = self.format_parser(profile_lines[0], format)
+                output = self.format_parser(profile_lines[0], profile_format)
         else:
-            output = self.format_parser(profile_lines[0], format)
+            output = self.format_parser(profile_lines[0], profile_format)
         return output
 
 
-    def format_parser(self, line, format):
+    def format_parser(self, line, profile_format):
 
         output = []
-        if format == 'txt':
-            receptor, ligand, start, im = line.strip().split(':')
+        if profile_format == 'txt':
+            _, _, start, im = line.strip().split(':')
             start = int(math.floor(float(start)))
             im = im.split(';')
             if len(im) != len(ROWS.keys()):
@@ -1198,15 +1257,16 @@ class SIFt2DProfileReader:
 
 
 #==============================================================================
-def readProfile(filename='', filehandle=None, input_string=None, format='txt'):
+def readProfile(filename='', filehandle=None, input_string=None, profile_format='txt'):
 
     if filename != '':
         print(filename)
-        return SIFt2DProfileReader(filename, format=format).get_profile()
-    elif filehandle:
-        return SIFt2DProfileReader(filehandle=filehandle, format=format).get_profile()
-    elif input_string:
-        return SIFt2DProfileReader(input_string=input_string, format=format).get_profile()
+        return SIFt2DProfileReader(filename, profile_format=profile_format).get_profile()
+    if filehandle:
+        return SIFt2DProfileReader(filehandle=filehandle, profile_format=profile_format).get_profile()
+    if input_string:
+        return SIFt2DProfileReader(input_string=input_string, profile_format=profile_format).get_profile()
+    return
 
 
 
