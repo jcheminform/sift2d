@@ -3,8 +3,20 @@ import sift2d as im
 import matplotlib.pyplot as plt
 
 parser = optparse.OptionParser()
-parser.add_option('-p', '--profile', dest='profile', action='store_true', help='Read the 2D-SIFt profile as an input.')
-parser.add_option('-r', '--residues', dest='residues', action='store_true', help='Generate per-residue heatmaps.')
+parser.add_option(
+    '-p',
+    '--profile',
+    dest='profile',
+    action='store_true',
+    help='Read the 2D-SIFt profile as an input.'
+    )
+parser.add_option(
+    '-r',
+    '--residues',
+    dest='residues',
+    action='store_true',
+    help='Generate per-residue heatmaps.'
+    )
 
 
 (options, args) = parser.parse_args()
@@ -28,4 +40,5 @@ for arg in exp_args:
             fig.clf()
 
     fig = s2dfp.get_heatmap([s.resnum for s in s2dfp.get_interacting_chunks()], plt.cm.Greys)
-    fig.savefig('{}.png'.format(s2dfp.receptor_name), dpi=300)
+    # fig.savefig('{}.png'.format(s2dfp.receptor_name), dpi=300)
+    fig.savefig('qq3.png', dpi=300)

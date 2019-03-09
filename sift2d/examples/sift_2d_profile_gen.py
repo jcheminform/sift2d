@@ -46,7 +46,11 @@ for arg in args:
     else:
         exp_args.append(arg)
 for arg in exp_args:
-    sift_list.extend(list(im.SIFt2DReader(arg)))
+    print(arg)
+    try:
+        sift_list.extend(list(im.SIFt2DReader(arg)))
+    except:
+        continue
     print("{}\t{}".format(list(im.SIFt2DReader(arg))[0].receptor_name, [x.resnum for x in list(im.SIFt2DReader(arg))[0].get_interacting_chunks()]))
 generic_numbers = None
 if options.generic:

@@ -10,11 +10,11 @@ def read(fname):
 
 setup(
     name="sift2d",
-    version="0.1",
+    version="0.2",
     author="Stefan Mordalski",
     author_email="stefanm@if-pan.krakow.pl",
     description=("A library to generate and manipulate 2D-SIFt interaction matrices."),
     license="BSD",
-    packages=['sift2d', 'examples'],
+    packages=['sift2d',],
     long_description=read('README.md'),
 )
