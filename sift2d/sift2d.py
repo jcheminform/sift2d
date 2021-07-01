@@ -10,12 +10,16 @@ import math
 from string import Template
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 try:
     from schrodinger.structutils import analyze
     from schrodinger.structutils import interactions
     from schrodinger.structutils import measure
 except ImportError:
-    pass
+    from rdkit import RDConfig
+    from rdkit.Chem import ChemicalFeatures, AddHs
+    from rdkit.Chem.rdmolfiles import SDMolSupplier
+    from Bio.PDB import PDBParser
 
 #Iteraction type to row/column number
 COLUMNS = {
@@ -39,6 +43,25 @@ ROWS = {
     'ANY' : 6,
     }
 
+POLAR_RESIDUES = ["ARG", "ASP", "GLU", "HIS", "ASN", "GLN", "LYS", "SER", "THR", "TYR", "PRO", "TRP", "CYS"]
+HB_DONOR = ["ARG", "HIS", "LYS", "ASP", "GLU", "THR", "SER", "TYR", "PRO", "TRP", "ASN", "GLN", "CYS"]
+HB_ACCEPTOR = ["ASP", "GLU", "ASN", "GLN"]
+HYDROPHOBIC_RESIDUES = [
+    "PHE",
+    "LEU",
+    "ILE",
+    "TYR",
+    "TRP",
+    "VAL",
+    "MET",
+    "PRO",
+    "CYS",
+    "ALA",
+]
+AROMATIC_RESIDUES = ["PHE", "TYR", "TRP"]
+POS_CHARGE_RESIDUES = ["ARG", "LYS", "HIS"]
+NEG_CHARGE_RESIDUES = ["ASP", "GLU"]
+
 #Residue sets by properties
 RESIDUE_SETS = {
     "HYDROPHOBIC_RESIDUES": ["PHE", "LEU", "ILE", "TYR", "TRP",
@@ -46,14 +69,16 @@ RESIDUE_SETS = {
                              "CYX"],
     "P_CHARGED_RESIDUES": ["ARG", "LYS", "HIS", "HID"],
     "N_CHARGED_RESIDUES": ["ASP", "GLU"],
-    }
+    "HYDROPHOBIC_RESIDUES": ["PHE", "LEU", "ILE","TYR", "TRP",
+                             "VAL", "MET", "PRO", "CYS", "ALA"],
+    "AROMATIC_RESIDUES": ["PHE", "TYR", "TRP"],
 
+    }
+BACKBONE_ATOMS = ['C', 'N', 'O', 'CA']
 #Order of returning the most frequent interactions
 INTERACTION_HIERARCHY = ['CHARGED', 'H_ACCEPTOR', 'H_DONOR', 'POLAR', 'AROMATIC', 'HYDROPHOBIC']
 
-# Rules for distance-based interactions, h_bonds and
-# aromatic interactions are evaluated with
-# builtin Schrodinger functions
+# Rules for distance-based interactions
 INTERACTION_RULES = {
     'P_CHARGED': [['N_CHARGED_RESIDUES'], ['CHARGED']],
     'N_CHARGED': [['P_CHARGED_RESIDUES'], ['CHARGED']],
@@ -94,11 +119,38 @@ PH_PATTERNS = {
      'n1nc[nH]n1', 'n1ncnn1', '[#1]N([S;X4](=O)(=O))(C(F)(F)(F))', '[-]'],
     }
 
+COULOMB_CUTOFF = 5.0
+HBOND_CUTOFF = 2.8
+POLAR_CUTOFF = 3.5
+VDW_CUTOFF = 4.0
+PI_CUTOFF = 6.0
+
 #Output templates
 OUTPUT_FORMAT = {
     'txt' : Template("$receptor:$ligand:$start:$fp"),
     }
 
+def get_distance(pos1, pos2):
+
+    return np.sqrt(np.dot(pos1 - pos2, pos1 - pos2))
+
+def get_shortest_distance(res, atom_coords):
+
+    return min(
+        [
+            np.sqrt(np.dot(x.get_vector() - atom_coords, x.get_vector() - atom_coords))
+            for x in res.get_atoms()
+        ]
+    )
+
+def get_shortest_distance_atoms(atom_set, atom_coords):
+
+    return min(
+        [
+            np.sqrt(np.dot(x.get_vector() - atom_coords, x.get_vector() - atom_coords))
+            for x in atom_set
+        ]
+    )
 
 #==============================================================================
 class SIFt2DChunk:
@@ -571,7 +623,7 @@ class SIFt2DGenerator:
     def __init__(self, rec_struct, ligs, cutoff=3.5,
                  use_generic_numbers=False, unique=False, property_=None):
 
-        self.sifts = [] #List of SIFt2D objects
+        self.sifts = []
         self.starting_res_num = 0
         self.ending_res_num = 0
         self.seq_len = 0
@@ -898,6 +950,327 @@ class SIFt2DGenerator:
             pass
         matches['AROMATIC'] = [x.getAtomList() for x in lig_struct.ring]
         matches['ANY'] = [[x.index for x in lig_struct.atom]]
+        return matches
+
+
+    def write_all(self, outfile=None, mode='w'):
+        """
+        Batch saving all 2D-SIFt object stored in generator.
+        """
+
+        print("Writing interaction matrix to a file.")
+        if outfile is None:
+            outfile = '{!s}_2dfp.dat'.format(self.receptor_st.title)
+        outfh = open(outfile, mode)
+        if self._generic_numbers:
+            outfh.write("#{!s}\n".format(';'.join([str(x) for x in sorted(self._generic_numbers)])))
+
+        for sift in self.sifts:
+            sift.write(filehandle=outfh)
+        outfh.close()
+
+
+class Ring:
+    def __init__(self, pdb_res=None, coords=None):
+
+        self.residue = None
+        self.res_name = "lig"
+
+        if pdb_res:
+            at = list(pdb_res)
+            self.residue = pdb_res
+            self.res_name = self.residue.resname
+            self.atoms = [
+                x for x in at if x.get_name() not in ["C", "CA", "CB", "N", "O", "OH"]
+            ]
+            # print([x.get_vector() for x in self.atoms])
+            self.center = np.average([x.coord for x in self.atoms], axis=0)
+
+        if coords:
+            self.atoms = coords
+            self.center = np.average(self.atoms, axis=0)
+
+class SIFt2DGeneratorNoMMLibs:
+    """
+    The class generating 2D-SIFt matrices for a given set of ligands and a receptor.
+    The SIFt bits are generated for every residue in the input file,
+    however the output file contains starting residue number.
+    """
+
+    generic_chunk = SIFt2DChunk()
+
+
+    def __init__(self, pdb_file, ligand_file, cutoff=3.5,
+                 use_generic_numbers=False, unique=False, property_=None):
+
+        self.sifts = []
+        self.starting_res_num = 0
+        self.ending_res_num = 0
+        self.seq_len = 0
+        self._lig_list = []
+        self._rings = []
+        self._generic_numbers = None
+
+        self.polar_resi = []
+        self.hb_resi = []
+        self.pos_chg_resi = []
+        self.neg_chg_resi = []
+        self.all_resi = []
+
+        self._fdef = ChemicalFeatures.BuildFeatureFactory("BaseFeatures.fdef")
+        self.ligand_structs = SDMolSupplier(ligand_file)
+
+        self.receptor_name = os.path.splitext(os.path.basename(pdb_file))[0]
+
+        self.receptor_st = self.parse_pdb(pdb_file)
+        self.cutoff = cutoff
+        self.hbond_cutoff = 2.5
+
+        self._get_receptor_params()
+
+        for num, lig in enumerate(self.ligand_structs):
+            if property_:
+                if unique and lig.property[property_] in self._lig_list:
+                    continue
+                self.sifts.append(SIFt2D(
+                    lig.GetProp(property_),
+                    self.receptor_name,
+                    self.starting_res_num,
+                    self.ending_res_num,
+                    self._generic_numbers))
+                print("Working on ligand {!s} {:n}".format(lig.GetProp(property_), num))
+            else:
+                if unique and lig.title in self._lig_list:
+                    continue
+                self.sifts.append(SIFt2D(
+                    lig.GetProp("_Name"),
+                    self.receptor_name,
+                    self.starting_res_num,
+                    self.ending_res_num,
+                    self._generic_numbers))
+                print("Working on ligand {!s} {:n}".format(lig.title, num))
+
+            self.generate_2d_sift(lig, self.sifts[-1])
+            if unique and property_:
+                self._lig_list.append(lig.GetProp(property_))
+            elif unique:
+                self._lig_list.append(lig.GetProp("_Name"))
+
+    def parse_pdb(self, pdb_file):
+
+        pdb_struct = PDBParser(PERMISSIVE=True, QUIET=True).get_structure(
+            "ref", pdb_file
+        )[0]
+        for chain in pdb_struct:
+            for res in chain:
+                resname = res.resname
+                if resname in RESIDUE_SETS["AROMATIC_RESIDUES"]:
+                    # print(list(res))
+                    self._rings.append(Ring(res))
+                if resname in RESIDUE_SETS["POLAR_RESIDUES"]:
+                    self.polar_resi.append(res)
+                if resname in RESIDUE_SETS["HYDROPHOBIC_RESIDUES"]:
+                    self.hb_resi.append(res)
+                if resname in RESIDUE_SETS["P_CHARGED_RESIDUES"]:
+                    self.pos_chg_resi.append(res)
+                if resname in RESIDUE_SETS["N_CHARGED_RESIDUES"]:
+                    self.neg_chg_resi.append(res)
+                self.all_resi.append(res)
+        return pdb_struct
+
+    def __iter__(self):
+        """
+        Iterator over all 2DSIFts
+        """
+        for sift in self.sifts:
+            yield sift
+
+
+    def _get_receptor_params(self):
+        """
+        Extract starting and ending residues from structure.
+        Prepare rings for finding pi-pi and pi-cation interactions(speedup trick).
+        Private function.
+        """
+        if self._generic_numbers:
+            self.starting_res_num = min(self._generic_numbers)
+            self.ending_res_num = max(self._generic_numbers)
+            self.seq_len = len(self._generic_numbers)
+        else:
+            self.starting_res_num = min([x.resnum for x in self.receptor_st.residue])
+            self.ending_res_num = max([x.resnum for x in self.receptor_st.residue])
+            self.seq_len = self.ending_res_num - self.starting_res_num
+        self._rings = interactions.gather_rings(self.receptor_st)
+
+
+    def _get_generic_numbers_list(self):
+        """
+        Extract the list of generic numbers assigned to the input receptor.
+        Following GPCRdb convention, GPCRdb generic numbers are stored
+        as b factors of CA atom of each residue.
+        """
+        pass
+
+
+    def _get_generic_number(self, residue_number):
+        """
+        Retrieve GPCRdb generic number stored in CA temperature factor.
+        """
+
+        pass
+
+
+    def generate_2d_sift(self, ligand, sift):
+        """
+        Find interactions and encode the interaction matrix.
+        """
+        feats = self._fdef.GetFeaturesForMol(ligand)
+
+        mol = AddHs(ligand)
+        mol3d = mol.GetConformer()
+        for feat in feats:
+            fam = feat.GetFamily()
+            feat_atoms = feat.GetAtomIds()
+
+            # Charge
+            if fam == "PosIonizable":
+                for pc_res in self.neg_chg_resi:
+                    for feat_atom in feat_atoms:
+                        if (
+                            get_shortest_distance(
+                                pc_res, mol3d.GetAtomPosition(feat_atom)
+                            )
+                            < COULOMB_CUTOFF
+                        ):
+                            sift.activate_bits("CHARGED", 'N_CHARGED', pc_res.id[1], sift)
+            if fam == "NegIonizable":
+                for pc_res in self.pos_chg_resi:
+                    for feat_atom in feat_atoms:
+                        if (
+                            get_shortest_distance(
+                                pc_res, mol3d.GetAtomPosition(feat_atom)
+                            )
+                            < COULOMB_CUTOFF
+                        ):
+                            sift.activate_bits("CHARGED", 'PCHARGED', pc_res.id[1], sift)
+
+            # H-bond
+
+            if fam == 'Donor':
+                for acc_res in self.polar_resi:
+                    if acc_res.resname not in HB_ACCEPTOR:
+                        continue
+                    for feat_atom in feat_atoms:
+                        dist = get_shortest_distance(acc_res, mol3d.GetAtomPosition(feat_atom))
+                        if dist < HBOND_CUTOFF:
+                            sift.activate_bits("H_ACCEPTOR", "H_DONOR", acc_res.id[1], sift)
+                        elif dist < POLAR_CUTOFF:
+                            sift.activate_bits("POLAR", "H_DONOR", acc_res.id[1], sift)
+
+            if fam == 'Acceptor':
+                for don_res in self.polar_resi:
+                    if don_res.resname not in HB_DONOR:
+                        continue
+                    for feat_atom in feat_atoms:
+                        dist = get_shortest_distance(don_res, mol3d.GetAtomPosition(feat_atom))
+                        if dist < HBOND_CUTOFF:
+                            sift.activate_bits("H_DONOR", "H_ACCEPTOR", acc_res.id[1], sift)
+                        elif dist < POLAR_CUTOFF:
+                            sift.activate_bits("POLAR", "H_ACCEPTOR", acc_res.id[1], sift)
+
+            # Arom
+            if fam == 'Aromatic':
+                feat_ring = Ring(coords=[mol3d.GetAtomPosition(x) for x in feat_atoms])
+                # print(feat_ring.center)
+                for pdb_ring in self._rings:
+                    # print("Distance from {} {} ring is : {}".format(pdb_ring.residue.id[1], pdb_ring.res_name, get_distance(feat_ring.center, pdb_ring.center)))
+                    if get_distance(feat_ring.center, pdb_ring.center) < PI_CUTOFF:
+                        sift.activate_bits('AROMATIC', "AROMATIC", pdb_ring.residue.id[1], sift)
+
+            # Hydrophobic
+
+            if fam in ["Hydrophobe", "LumpedHydrophobe"]:
+                for hb_res in self.hb_resi:
+                    for feat_atom in feat_atoms:
+                        if (
+                            get_shortest_distance(hb_res, mol3d.GetAtomPosition(feat_atom))
+                            < VDW_CUTOFF
+                        ):
+                            sift.activate_bits("HYDROPHOBIC", "HYDROPHOBIC", hb_res.id[1], sift)
+        for res in self.all_resi:
+            if res.id[0].startswith('H_'): #skippping HETs
+                continue
+            SC = []
+            BB = []
+            for atom in res:
+                if atom.get_name() in BACKBONE_ATOMS:
+                    BB.append(atom)
+                else:
+                    SC.append(atom)
+            for lig_atom in mol3d.GetPositions():
+                if (lig_atom == [0., 0., 0.]).all():
+                    continue
+                try:
+                    if SC != []: #Gly case
+                        if get_shortest_distance_atoms(SC, lig_atom) < VDW_CUTOFF:
+                            sift.activate_bits("ANY", "ANY", res.id[1], sift)
+                            sift.activate_bits("SIDECHAIN", "ANY", res.id[1], sift)
+                    if get_shortest_distance_atoms(BB, lig_atom) < VDW_CUTOFF:
+                        sift.activate_bits("ANY", "ANY", res.id[1], sift)
+                        sift.activate_bits("BACKBONE", "ANY", res.id[1], sift)
+                except:
+                    pass
+
+        return sift
+
+
+    def activate_bits(self, act_bits, feat, resnum, matrix):
+        """
+        Increment the value of residue chunk for given interaction.
+        """
+        for bit in act_bits:
+            matrix[resnum].increment_bit(feat, bit)
+
+
+    def assign_pharm_feats(self, mol):
+        """
+        SMARTS based assignment of pharmacophore features (using Phase feature patterns).
+        Rings are extracted using Structure.ring iterator.
+        """
+        feats = self._fdef.GetFeaturesForMol(mol)
+        mol = AddHs(mol)
+        matches = {
+            'H_DONOR' : [],
+            'H_ACCEPTOR' : [],
+            'HYDROPHOBIC' : [],
+            'N_CHARGED' : [],
+            'P_CHARGED' : [],
+            'AROMATIC' : [],
+            'ANY': [x.GetIdx() for x in mol.GetAtoms()]
+        }
+
+        for feat in feats:
+            fam = feat.GetFamily()
+            feat_atoms = feat.GetAtomIds()
+
+            if fam == "PosIonizable":
+                matches['P_CHARGED'].append(feat_atoms)
+            if fam == "NegIonizable":
+                matches['N_CHARGED'].append(feat_atoms)
+            if fam == 'Donor':
+                matches['H_DONOR'].append(feat_atoms)
+
+            if fam == 'Acceptor':
+                matches['H_ACCEPTOR'].append(feat_atoms)
+            if fam == 'Aromatic':
+                matches['AROMATIC'].append(feat_atoms)
+
+            if fam in ["Hydrophobe", "LumpedHydrophobe"]:
+                matches['HYDROPHOBIC'].append(feat_atoms)
+
+        for key in matches:
+            if matches[key] == []: del matches[key]
+
         return matches
 
 
