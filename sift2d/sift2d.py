@@ -292,7 +292,34 @@ class SIFt2DChunk:
 
         return heatmap
 
+    def get_1d(self, binary=False):
+        """Converts matrix representation into linear one.
 
+        Args:
+            binary (bool, optional): Set 1D representation to be a bitstring. Defaults to False.
+        """
+        values = [
+            self.chunk[0,1],
+            self.chunk[0,2],
+            self.chunk[0,3],
+            self.chunk[0,5],
+            self.chunk[1,1],
+            self.chunk[1,2],
+            self.chunk[1,3],
+            self.chunk[1,6],
+            self.chunk[2,4],
+            self.chunk[3,9],
+            self.chunk[4,8],
+            self.chunk[4,9],
+            self.chunk[5,8],
+            self.chunk[5,9],
+            self.chunk[6,0],
+            self.chunk[6,1],
+            self.chunk[6,2]
+            ]
+        if binary:
+            return "".join([str(x) for x in np.clip(values, 0, 1)])
+        return "".join([str(x) for x in values])
 
 #==============================================================================
 class SIFt2D:
@@ -608,6 +635,14 @@ class SIFt2D:
 
         return heatmap
 
+
+    def get_1d_representation(self, binary=False):
+        return "{}:{}:{}:{}".format(
+            self.ligand_name,
+            self.receptor_name,
+            self.start,
+            "".join(x.get_1d_representation(binary) for x in self._chunks)
+        )
 
 #==============================================================================
 class SIFt2DGenerator:
