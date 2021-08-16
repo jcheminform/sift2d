@@ -318,8 +318,8 @@ class SIFt2DChunk:
             self.chunk[6,2]
             ]
         if binary:
-            return "".join([str(x) for x in np.clip(values, 0, 1)])
-        return "".join([str(x) for x in values])
+            return " ".join([str(x) for x in np.clip(values, 0, 1)])
+        return " ".join([str(x) for x in values])
 
 #==============================================================================
 class SIFt2D:
@@ -641,7 +641,7 @@ class SIFt2D:
             self.ligand_name,
             self.receptor_name,
             self.start,
-            "".join(x.get_1d_representation(binary) for x in self._chunks)
+            " ".join(x.get_1d_representation(binary) for x in self._chunks)
         )
 
 #==============================================================================
